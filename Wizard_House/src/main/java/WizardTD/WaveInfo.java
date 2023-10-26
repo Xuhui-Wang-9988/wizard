@@ -1,56 +1,31 @@
 package WizardTD;
-import processing.data.JSONArray;
-import processing.data.JSONObject;
 
 import java.util.List;
 
 public class WaveInfo {
     private int duration;
     private float preWavePause;
-    private Monsters monster;
-    private int quantity;
+    private List<Monsters> monsters;
+    private List<Integer> quantities;
 
-    public WaveInfo(int duration, float preWavePause, Monsters monster, int quantity) {
+    public WaveInfo(int duration, float preWavePause, List<Monsters> monsters, List<Integer> quantities) {
         this.duration = duration;
         this.preWavePause = preWavePause;
-        this.monster = monster;
-        this.quantity = quantity;
+        this.monsters = monsters;
+        this.quantities = quantities;
     }
-
-    // Getters
 
     public float getPreWavePause() {
         return preWavePause;
     }
-
     public int getDuration() {
         return duration;
     }
-
-    public Monsters getMonster() {
-        return monster;
+    public List<Monsters> getMonsters() {return monsters;}
+    public List<Integer> getQuantities() {
+        return quantities;
     }
 
-    public int getQuantity() {
-        return quantity;
-    }
-
-    // Setters
-    public void setDuration(int duration) {
-        this.duration = duration;
-    }
-
-    public void setPreWavePause(int preWavePause) {
-        this.preWavePause = preWavePause;
-    }
-
-    public void setMonster(Monsters monster) {
-        this.monster = monster;
-    }
-
-    public void setQuantity(int quantity) {
-        this.quantity = quantity;
-    }
 }
 
 

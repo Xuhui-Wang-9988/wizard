@@ -1,16 +1,13 @@
 package WizardTD;
-
 import processing.core.PApplet;
 import processing.core.PImage;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class Monsters {
     String type;
-    int x, y; // Grid Position
+    float x;
+    float y;
     float pixelX;
-    float pixelY; // pixel Position
+    float pixelY;
     float speed;
     float maxHP;
     float currentHP;
@@ -19,10 +16,12 @@ public class Monsters {
     PImage[] enemyImages;
     int currentImageIndex = 0;
     int deathAnimationCounter = 0;
-
-    private int pathIndex = 0; // 用于跟踪怪物当前在路径上的位置
-
-    static int[][] path1 = {
+    boolean isFrozen;
+    private int freezeDurationRemaining;
+    private int pathIndex = 0;
+    private boolean hasAddedMana = false;
+    private boolean hasReducedMana = false;
+    static float[][] path1 = {
             {0, 4},
             {4, 4},
             {4, 6},
@@ -33,7 +32,7 @@ public class Monsters {
             {3, 15}
 
     };
-    static int[][] path2 = {
+    static float[][] path2 = {
             {9, 1},
             {9, 6},
             {16, 6},
@@ -44,10 +43,9 @@ public class Monsters {
 
     };
 
-
     PApplet pApplet;
 
-    public Monsters(PApplet pApplet, String type, int startX, int startY,
+    public Monsters(PApplet pApplet, String type, float startX, float startY,
                     float speed, float HP, float armour, float manaGainedOnKill) {
         this.pApplet = pApplet;
         this.type = type;
@@ -60,6 +58,8 @@ public class Monsters {
         this.currentHP = HP;
         this.armour = armour;
         this.manaGainedOnKill = manaGainedOnKill;
+        this.isFrozen = false;
+        this.freezeDurationRemaining = 0;
         String[] imagePaths = {
                 "src/main/resources/WizardTD/gremlin.png",
                 "src/main/resources/WizardTD/gremlin1.png",
@@ -74,16 +74,27 @@ public class Monsters {
         }
     }
 
-    private int[][] path;
+    private float[][] path;
 
-    public void PathSelector(int[][] selectedPath) {
+    public void PathSelector(float[][] selectedPath) {
         this.path = selectedPath;
     }
 
+    public void freeze(float freezeDuration) {
+        isFrozen = true;
+        freezeDurationRemaining = Math.round(freezeDuration / (1.0f / 60));
+    }
+
     public void move() {
-        if (pathIndex < path.length - 1) {
-            int targetX = path[pathIndex + 1][0] ;
-            int targetY = path[pathIndex + 1][1];
+        if (isFrozen) {
+            freezeDurationRemaining--;
+            if (freezeDurationRemaining <= 0) {
+                isFrozen = false;
+            }
+        }
+        else if (pathIndex < path.length - 1) {
+            float targetX = path[pathIndex + 1][0] ;
+            float targetY = path[pathIndex + 1][1];
 
             float targetPixelX = convertToPixelCoordinate(targetX);
             float targetPixelY = convertToPixelCoordinate(targetY);
@@ -91,7 +102,6 @@ public class Monsters {
             float dx = targetPixelX - pixelX;
             float dy = targetPixelY - pixelY;
 
-            // 计算单位向量
             float length = (float) Math.sqrt(dx * dx + dy * dy);
             float ux = dx / length;
             float uy = dy / length;
@@ -106,33 +116,44 @@ public class Monsters {
                 pixelX = x * App.CELLSIZE;
                 pixelY = y * App.CELLSIZE;
             }
-        } /*else {
-            // 如果怪物已经到达路径的终点，你可以在这里添加其他的逻辑
-            // 例如，减少玩家的生命值或者移除这个怪物对象
-        }*/
+        }
+    }
+
+    public boolean playDeathAnimation() {
+        if (deathAnimationCounter % 4 == 0) {
+            if (currentImageIndex < enemyImages.length - 1) {
+                currentImageIndex++;
+            } else {
+                return true;
+            }
+        }
+        deathAnimationCounter++;
+        return false;
     }
 
     public void display() {
         if (isDead()) {
-            if (currentImageIndex < enemyImages.length - 1 && deathAnimationCounter % 4 == 0) {
-                currentImageIndex++;
+            boolean animationFinished = playDeathAnimation();
+            if (animationFinished) {
+                return;
             }
-            deathAnimationCounter++;
         }
-
-        // Convert grid coordinates to pixel coordinates for drawing
 
         pApplet.image(enemyImages[currentImageIndex], pixelX, pixelY);
         displaycurrentHPBar();
     }
 
-    private float convertToPixelCoordinate(int gridCoordinate) {
+    private float convertToPixelCoordinate(float gridCoordinate) {
         return gridCoordinate * App.CELLSIZE;
     }
 
-
     public void takeDamage(int damage) {
-        currentHP -= damage * (1 - armour); // Reduce currentHP by the damage amount, considering armour
+        if (this.currentHP - damage * (1 - armour) < 0) {
+            this.currentHP = 0;
+        }
+        else {
+            this.currentHP -= damage * (1 - armour);
+        }
     }
 
     public boolean isDead() {
@@ -140,44 +161,58 @@ public class Monsters {
     }
 
     private void displaycurrentHPBar() {
-        float currentHPPercentage = (float) currentHP / maxHP;
-        pApplet.fill(255, 0, 0); // Red color for the background of the currentHP bar
-        pApplet.rect(pixelX, pixelY - 10, enemyImages[0].width, 5); // Draw background
-        pApplet.fill(0, 255, 0); // Green color for the actual currentHP bar
-        pApplet.rect(pixelX, pixelY - 10, enemyImages[0].width * currentHPPercentage, 5); // Draw currentHP
+        float currentHPPercentage =  currentHP / maxHP;
+        pApplet.pushStyle();
+        pApplet.noFill();
+        pApplet.stroke(0,0,0);
+        pApplet.rect(pixelX, pixelY - 10, enemyImages[0].width, 5);
+        pApplet.fill(255, 0, 0);
+        pApplet.rect(pixelX, pixelY - 10, enemyImages[0].width, 5);
+        pApplet.noFill();
+        pApplet.fill(0, 255, 0);
+        pApplet.rect(pixelX, pixelY - 10, enemyImages[0].width * currentHPPercentage, 5);
+        pApplet.popStyle();
+    }
+
+    private boolean isDead = false;
+
+    public boolean hasFinishedDeathAnimation() {
+        return isDead && deathAnimationCounter / 4 >= enemyImages.length;
     }
 
 
     public boolean hasReachedEnd(Board board) {
-//        int[] wizardHousePosition = board.findWizardHousePosition();
-
-        // Check if the monster's position is the same as the wizard house's position
-//        return x == wizardHousePosition[1] && y == wizardHousePosition[0];
         return x == 3 && y == 15;
     }
 
     public float[] getPixelPosition() {
         return new float[] {pixelX, pixelY};
     }
-
-
     public float getSpeed() {
         return speed;
     }
-
     public String getType() {
         return type;
     }
-
     public float getHP() {
-        return maxHP;
+        return currentHP;
     }
-
     public float getArmour() {
         return armour;
     }
-
     public float getManaGainedOnKill() {
         return manaGainedOnKill;
+    }
+    public void setHasAddedMana(boolean hasAddedMana) {
+        this.hasAddedMana = hasAddedMana;
+    }
+    public boolean hasAddedMana() {
+        return hasAddedMana;
+    }
+    public boolean hasReducedMana() {
+        return hasReducedMana;
+    }
+    public void setHasReducedMana(boolean hasReducedMana) {
+        this.hasReducedMana = hasReducedMana;
     }
 }

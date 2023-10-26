@@ -2,14 +2,11 @@ package WizardTD;
 
 import processing.core.PApplet;
 import processing.core.PImage;
-import processing.data.JSONArray;
-import processing.data.JSONObject;
 import processing.event.MouseEvent;
 
 import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
-
 import java.util.*;
 
 public class App extends PApplet {
@@ -24,16 +21,15 @@ public class App extends PApplet {
 
     public static final int FPS = 60;
 
-    public String configPath;
+    public static final int newFPS = 120;
 
-    public Random random = new Random();
+    public String configPath;
 	
 	// Feel free to add any additional methods or attributes you want. Please put classes in different files.
-
-
     int currentWaveIndex = 0;
-    int currentMonsterIndex = 0;
-    int monsterSpawnTimer = 0;
+
+    private boolean gameOver = false;
+    private boolean gameWin = false;
 
     public App() {
         this.configPath = "config.json";
@@ -50,119 +46,46 @@ public class App extends PApplet {
     /**
      * Load all resources such as images. Initialise the elements such as the player, enemies and map elements.
      */
-
-
     Board maploader;
-    Wizard wizard;
+    ConfigLoader config;
+    List<Waves> wavelist;
+    ArrayList<Towers> towersList;
+    ArrayList<FreezeTower> freezers;
 
-    JSONArray waves;
-
-    List<Waves> wavelist = new ArrayList<>();
-    List<WaveInfo> waveInfoList = new ArrayList<>();
-
-    ArrayList<Towers> towersList = new ArrayList<>();
-
-
-    ArrayList<Monsters> enemies = new ArrayList<>();
-
-
+    Mana mana;
 
     @Override
     public void setup() {
         frameRate(FPS);
+        currentWaveIndex = 0;
+
+        wavelist = new ArrayList<>();
+        towersList = new ArrayList<>();
+        freezers = new ArrayList<>();
         // Map loader
-        ConfigLoader config = new ConfigLoader(this);
+        config = new ConfigLoader(this);
         config.loadConfig(configPath);
         List<WaveInfo> waveInfoList = config.getWaveInfoList();
-        for (int i = 0; i < waveInfoList.size(); i ++) {
-//            System.out.println(waveInfoList.get(i).getDuration()+ "\n");
-        }
+        mana = new Mana(this, config);
 
-        System.out.println("waveInfoList Size:"+ waveInfoList.size()+ "\n");
 
-        maploader = new Board(this, config.getLayout() );
-        wizard = new Wizard(this, maploader);
-
-        // add waves
+        maploader = new Board(this,config ,mana, config.getLayout() );
         for (int i = 0; i < waveInfoList.size(); i++) {
-//            Waves currentWave = new Waves(this, waveInfoList, i, maploader);
-            wavelist.add(new Waves(this, waveInfoList, maploader));
+            wavelist.add(new Waves(this, waveInfoList, maploader, mana));
         }
-
-        System.out.println("wavelist size: "+wavelist.size() + "\n");
-
-
-
     }
-
-    // setting for user's behaviour
-    boolean isBuilderTowerPressed = false;
-    boolean isSpeedUpPressed = false;
-    boolean isPausePressed = false;
-    boolean isUpgradeRangePressed = false;
-    boolean isUpgradeSpeedPressed = false;
-    boolean isUpgradeDamagePressed = false;
-    boolean isManaPoolPressed = false;
-
-    enum GameAction {
-        NORMAL,
-        SPEED_UP, // "FF" : 2x speed
-        PAUSE, // "P": PAUSE
-        BUILD_TOWER, // "T": Build tower
-        UPGRADE_RANGE, // "U 1": Upgrade range
-        UPGRADE_SPEED, // "U 2": Upgrade speed
-        UPGRADE_DAMAGE, // "U 3": Upgrade damage
-        MANA_POOL // "M" : Mana pool cost: 100
-    }
-    private GameAction currentAction = GameAction.NORMAL;
-
 
     /**
      * Receive key pressed signal from the keyboard.
      */
-	@Override
+    @Override
     public void keyPressed(){
-        char actionKey = Character.toUpperCase(key);
-        switch (actionKey) {
-            case 'T':
-                currentAction = GameAction.BUILD_TOWER;
-                isBuilderTowerPressed = true;
-                break;
-            case 'F':
-                currentAction = GameAction.SPEED_UP;
-                isSpeedUpPressed = true;
-                break;
-            case 'P':
-                currentAction = GameAction.PAUSE;
-                isPausePressed = true;
-                break;
-            case '1':
-                currentAction = GameAction.UPGRADE_RANGE;
-                isUpgradeRangePressed = true;
-                break;
-            case '2':
-                currentAction = GameAction.UPGRADE_SPEED;
-                isUpgradeSpeedPressed = true;
-                break;
-            case '3':
-                currentAction = GameAction.UPGRADE_DAMAGE;
-                isUpgradeDamagePressed = true;
-                break;
-            case 'M':
-                currentAction = GameAction.MANA_POOL;
-                isManaPoolPressed = true;
-                break;
-            default:
-                currentAction = GameAction.NORMAL;
-                break;
+        if (gameOver && (key == 'r' || key == 'R')) {
+            setup();
+            gameWin = false;
+            gameOver = false;
         }
-
-        if (isBuilderTowerPressed) {
-            Towers tower = Towers.createTower(this, maploader, mouseX, mouseY, 100, 100, 1, 10); // You can adjust the tower attributes as needed
-            if (tower != null) {
-                towersList.add(tower);
-            }
-        }
+        maploader.keyPressed();
 
     }
 
@@ -170,177 +93,85 @@ public class App extends PApplet {
      * Receive key released signal from the keyboard.
      */
 	@Override
-    public void keyReleased(){
-        char actionKey = Character.toUpperCase(key);
-        switch (actionKey) {
-            case 'T':
-                isBuilderTowerPressed = false;
-                break;
-            case 'F':
-                isSpeedUpPressed = false;
-                break;
-            case 'P':
-                isPausePressed = false;
-                break;
-            case '1':
-                isUpgradeRangePressed = false;
-                break;
-            case '2':
-                isUpgradeSpeedPressed = false;
-                break;
-            case '3':
-                isUpgradeDamagePressed = false;
-                break;
-            case 'M':
-                isManaPoolPressed = false;
-                break;
-        }
-
-    }
+    public void keyReleased(){}
 
     @Override
     public void mousePressed(MouseEvent e) {
-        int x = e.getX();
-        int y = e.getY();
-        if (x >= 650 && x <= 695) {
-            if (y >= 60 && y <= 105) {
-                currentAction = GameAction.SPEED_UP;
-                isSpeedUpPressed = true;
-            } else if (y >= 120 && y <= 165) {
-                currentAction = GameAction.PAUSE;
-                isPausePressed = true;
-            } else if (y >= 180 && y <= 225) {
-                currentAction = GameAction.BUILD_TOWER;
-                isBuilderTowerPressed = true;
-            } else if (y >= 240 && y <= 285) {
-                currentAction = GameAction.UPGRADE_RANGE;
-                isUpgradeRangePressed = true;
-            } else if (y >= 300 && y <= 345) {
-                currentAction = GameAction.UPGRADE_SPEED;
-                isUpgradeSpeedPressed = true;
-            } else if (y >= 360 && y <= 405) {
-                currentAction = GameAction.UPGRADE_DAMAGE;
-                isUpgradeDamagePressed = true;
-            } else if (y >= 420 && y <= 465) {
-                currentAction = GameAction.MANA_POOL;
-                isManaPoolPressed = true;
-            }
-        }
-
-        Towers newTower = Towers.createTower(this, maploader, x, y, 100, 100, 1, 10);
-        if (newTower != null) {
-            towersList.add(newTower);
-        }
+        maploader.mousePressed(e);
+        towersList = maploader.getTowerList();
+        freezers = maploader.getFreezers();
 
     }
 
     @Override
-    public void mouseReleased(MouseEvent e) {
-        int x = e.getX();
-        int y = e.getY();
-        if (x >= 650 && x <= 695) {
-            if (y >= 60 && y <= 105) {
-                isSpeedUpPressed = false;
-            } else if (y >= 120 && y <= 165) {
-                isPausePressed = false;
-            } else if (y >= 180 && y <= 225) {
-                isBuilderTowerPressed = false;
-            } else if (y >= 240 && y <= 285) {
-                isUpgradeRangePressed = false;
-            } else if (y >= 300 && y <= 345) {
-                isUpgradeSpeedPressed = false;
-            } else if (y >= 360 && y <= 405) {
-                isUpgradeDamagePressed = false;
-            } else if (y >= 420 && y <= 465) {
-                isManaPoolPressed = false;
-            }
-        }
-
-    }
-
-    /*@Override
-    public void mouseDragged(MouseEvent e) {
-
-    }*/
-
-    int poolCost = 100;
+    public void mouseReleased(MouseEvent e) {}
 
 
     /**
      * Draw all elements in the game by current frame.
      */
+
+    private int totalRemoved = 0;
+    private int countTotalRemoved1() {
+        totalRemoved = 0;
+        for (int i = 0; i < wavelist.size(); i++) {
+            totalRemoved += wavelist.get(i).getTotalRemoved();
+        }
+        return totalRemoved;
+    }
+
     @Override
     public void draw() {
-        background(131,112,75);
+        if (gameOver) {
+            pushStyle();
+            textSize(32);
+            fill(114, 227, 111);
+            text("YOU LOST", width/2 - 126, height/2 - 114);
+            textSize(20);
+            text("Press 'r' to restart", width/2 - 142, height/2 - 62);
+            popStyle();
 
-        fill(255, 249, 12); // the lower case of button, fill with yellow
-        if (!isSpeedUpPressed) rect(650,60,45,45); // "FF" : 2x speed
-        if (!isPausePressed) rect(650,120,45,45); // "P": PAUSE
-        if (!isBuilderTowerPressed) rect(650,180,45,45); // "T": Build tower
-        if (!isUpgradeRangePressed) rect(650,240,45,45); // "U 1": Upgrade range
-        if (!isUpgradeSpeedPressed) rect(650,300,45,45); // "U 2": Upgrade speed
-        if (!isUpgradeDamagePressed) rect(650,360,45,45); // "U 3": Upgrade damage
-        if (!isManaPoolPressed) rect(650,420,45,45); // "M" : Mana pool cost: 100
-
-        //once click on the button, the lower case will be shown
-        fill(131, 112, 75); // fill with background colour, Brown
-
-        if (isSpeedUpPressed) rect(650,60,45,45); // "FF" : 2x speed
-        if (isPausePressed) rect(650,120,45,45); // "P": PAUSE
-        if (isBuilderTowerPressed) rect(650,180,45,45); // "T": Build tower
-        if (isUpgradeRangePressed) rect(650,240,45,45); // "U 1": Upgrade range
-        if (isUpgradeSpeedPressed) rect(650,300,45,45); // "U 2": Upgrade speed
-        if (isUpgradeDamagePressed) rect(650,360,45,45); // "U 3": Upgrade damage
-        if (isManaPoolPressed) rect(650,420,45,45); // "M" : Mana pool cost: 100
-
-
-
-        fill(0); // black for text
-
-        textSize(24);
-        text("FF", 650 + 7, 60 + 30);
-        text("P", 650 + 14, 120 + 30);
-        text("T", 650 + 14, 180 + 30);
-        text("U1", 650 + 7, 240 + 30);
-        text("U2", 650 + 7, 300 + 30);
-        text("U3", 650 + 7, 360 + 30);
-        text("M", 650 + 12, 420 + 30);
-
-
-
-
-        textSize(11);
-        text("2x speed", 650 + 45 + 5, 60 + 15);
-        text("PAUSE", 650 + 45 + 5, 120 + 15);
-        text("Build", 650 + 45 + 5, 180 + 15);
-        text("tower", 650 + 45 + 5, 180 + 30);
-        text("Upgrade", 650 + 45 + 5, 240 + 15);
-        text("range", 650 + 45 + 5, 240 + 30);
-        text("Upgrade", 650 + 45 + 5, 300 + 15);
-        text("speed", 650 + 45 + 5, 300 + 30);
-        text("Upgrade", 650 + 45 + 5, 360 + 15);
-        text("damage", 650 + 45 + 5, 360 + 30);
-        text("Mana pool", 650 + 45 + 5, 420 + 15);
-        text("cost " + poolCost, 650 + 45 + 5, 420 + 30);
-
-
-
-        maploader.draw();
-        wizard.draw();
-
-        for (Towers tower : towersList) {
-            tower.display();
         }
+        else if (gameWin) {
+            maploader.draw();
+            pushStyle();
+            textSize(32);
+            fill(230, 57, 216);
+            text("YOU WON", width/2 - 126, height/2 - 114);
+            popStyle();
+        }
+        else if (!maploader.isGamePaused) {
+            maploader.draw();
+            mana.update();
+            int origin = config.getTotoalquality();
+            int remove = countTotalRemoved1();
+            if (origin == remove) {
+                gameWin = true;
+            }
 
-        // Update and draw only the current wave
-        if (currentWaveIndex < wavelist.size()) {
-            Waves currentWave = wavelist.get(currentWaveIndex);;
-            currentWave.update();
-            currentWave.updateMonsters();
+            // Update and draw only the current wave
+            if (currentWaveIndex < wavelist.size()) {
+                Waves currentWave = wavelist.get(currentWaveIndex);
+                List<Monsters> activeMonsters = currentWave.getActiveMonsters();
 
-            // Check if the wave is complete and prepare the next wave if needed
-            if (currentWave.isWaveComplete()) {
-//                currentWaveIndex++;
+                for (Towers tower : towersList) {
+                    tower.setMonstersList(activeMonsters);
+                    tower.display();
+                }
+
+                for (FreezeTower freezer : freezers) {
+                    freezer.setMonstersList(activeMonsters);
+                    freezer.display();
+                }
+
+                currentWave.update();
+                currentWave.updateMonsters();
+
+            }
+
+            if (mana.getCurrentMana() == 0) {
+                gameOver = true;
+
             }
         }
     }

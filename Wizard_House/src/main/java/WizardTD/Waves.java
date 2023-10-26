@@ -9,6 +9,8 @@ import java.util.Random;
 public class Waves {
     PApplet pApplet;
     List<WaveInfo> wavesInfo;
+
+    Mana mana;
     float preWavePause;
     int duration;
     Board board;
@@ -19,11 +21,16 @@ public class Waves {
     boolean isWaveActive = false;
     boolean isWaveComplete = false;
     WaveInfo currentWaveInfo;
+    private int totalRemoved = 0;
+    private final Random random = new Random();
+    private int currentMonsterTypeIndex = 0;
+    private int totalMonstersSpawnedForCurrentType = 0;
 
-    public Waves(PApplet pApplet, List<WaveInfo> wavesInfo, Board board) {
+    public Waves(PApplet pApplet, List<WaveInfo> wavesInfo, Board board, Mana mana) {
         this.pApplet = pApplet;
         this.wavesInfo = wavesInfo;
         this.board = board;
+        this.mana = mana;
         updateCurrentWaveInfo();
     }
 
@@ -41,63 +48,84 @@ public class Waves {
     }
 
     public void update() {
+        // Display the countdown on the top bar
+        if (waveIndex < wavesInfo.size()) {
+            pApplet.textSize(24);
+            if (!isWaveActive) {
+                pApplet.pushStyle();
+                pApplet.fill(0);
+                pApplet.text("Wave " + (waveIndex + 1) + " starts in: " + (int) Math.max(0, (preWavePause - frameCounter / 60)), 10, 30);
+                pApplet.popStyle();
+            }
+        }
+
         if (!isWaveActive) {
             preWavePause();
         } else {
-
             spawnMonsters();
         }
+
+        isWaveComplete = !isWaveActive && activeMonsters.isEmpty();
         frameCounter++;
     }
 
     private void preWavePause() {
-        if (waveIndex < wavesInfo.size()) {
-            pApplet.textSize(24);
-            pApplet.text("Wave " + (waveIndex + 1) + " starts: " + (int) ((preWavePause - frameCounter / 60)), 10, 30);
-        }
-        if (frameCounter >= preWavePause * 60) {
+        if (frameCounter >= preWavePause * 60 && currentWaveInfo != null) {
             isWaveActive = true;
-            spawnMonsters();  // 立刻开始当前波次
-            frameCounter = 0;  // 重置frameCounter以开始下一个波次的倒计时
+            frameCounter = 0;
         }
     }
 
     private void spawnMonsters() {
-        if (currentWaveInfo == null) return;
+        if (currentWaveInfo == null || waveIndex >= wavesInfo.size()) return;
 
-        if (frameCounter % (duration * 60 / currentWaveInfo.getQuantity()) == 0 && currentMonsterIndex < currentWaveInfo.getQuantity()) {
-            Monsters newMonster = getMonsters(currentWaveInfo);
+        int spawnInterval = (duration * 60) / getTotalMonstersForWave();
+
+        if (frameCounter % spawnInterval == 0 && totalMonstersSpawnedForCurrentType < currentWaveInfo.getQuantities().get(currentMonsterTypeIndex)) {
+            Monsters monsterType = currentWaveInfo.getMonsters().get(currentMonsterTypeIndex);
+            Monsters newMonster = getMonsters(monsterType);
             activeMonsters.add(newMonster);
-            currentMonsterIndex++;
-        }
+            totalMonstersSpawnedForCurrentType++;
 
-        if (currentMonsterIndex >= currentWaveInfo.getQuantity() && activeMonsters.isEmpty()) {
-            isWaveComplete = true;
-            isWaveActive = false;
-            waveIndex++;
-            updateCurrentWaveInfo();
+            if (totalMonstersSpawnedForCurrentType >= currentWaveInfo.getQuantities().get(currentMonsterTypeIndex)) {
+                currentMonsterTypeIndex++;
+                totalMonstersSpawnedForCurrentType = 0;
+            }
+
+            if (currentMonsterTypeIndex >= currentWaveInfo.getMonsters().size()) {
+                isWaveActive = false;
+                currentMonsterTypeIndex = 0;  // Reset for the next wave
+                waveIndex++;
+                updateCurrentWaveInfo();
+                frameCounter = 0;  // Reset frameCounter for the next wave's countdown
+            }
         }
     }
-    private Random random = new Random();
 
+    private int getTotalMonstersForWave() {
+        int total = 0;
+        for (int quantity : currentWaveInfo.getQuantities()) {
+            total += quantity;
+        }
+        return total;
+    }
 
-    private Monsters getMonsters(WaveInfo currentWaveInfo) {
-        int[][] selectedPaths;
+    private Monsters getMonsters(Monsters monster) {
+        float[][] selectedPaths;
         if (random.nextBoolean()) {
             selectedPaths = Monsters.path1;
-        }
-        else {
+        } else {
             selectedPaths = Monsters.path2;
         }
         Monsters newMonster = new Monsters(
                 pApplet,
-                currentWaveInfo.getMonster().getType(),
+                monster.getType(),
                 selectedPaths[0][0],
                 selectedPaths[0][1],
-                currentWaveInfo.getMonster().getSpeed(),
-                currentWaveInfo.getMonster().getHP(),
-                currentWaveInfo.getMonster().getArmour(),
-                currentWaveInfo.getMonster().getManaGainedOnKill()
+                monster.getSpeed(),
+                monster.getHP(),
+                monster.getArmour(),
+                monster.getManaGainedOnKill()
         );
         newMonster.PathSelector(selectedPaths);
         return newMonster;
@@ -109,17 +137,32 @@ public class Waves {
             Monsters monster = iterator.next();
             monster.move();
             monster.display();
-
-            if (monster.isDead()) {
+            if (monster.isDead() && !monster.hasAddedMana()) {
+                float manaGainedOnKill = mana.getManaGainedMultiplier() * monster.getManaGainedOnKill();
+                mana.setCurrentMana(mana.getCurrentMana()+ manaGainedOnKill);
+                totalRemoved++;
+                monster.setHasAddedMana(true);
+            }
+            if (monster.hasFinishedDeathAnimation()) {
                 iterator.remove();
             } else if (monster.hasReachedEnd(board)) {
+                if (!monster.hasReducedMana() && monster.getHP() != 0.0) {
+                    mana.setCurrentMana(mana.getCurrentMana() - monster.getHP());
+                    totalRemoved++;
+                    monster.setHasReducedMana(true);
+                }
                 iterator.remove();
             }
         }
+        if (!isWaveActive && activeMonsters.isEmpty()) {
+            isWaveComplete = true;
+        }
     }
 
-    public boolean isWaveComplete() {
-        return isWaveComplete;
+    public int getTotalRemoved() {return totalRemoved;}
+
+    public List<Monsters> getActiveMonsters() {
+        return this.activeMonsters;
     }
 }
 
